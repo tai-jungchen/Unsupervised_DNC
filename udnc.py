@@ -1,29 +1,22 @@
 """
 Author: Alex (Tai-Jung) Chen
 
-This code implements the proposed DNC method with an unsupervised learning technique. DNC uses partial OvO and
-customized decision rules in voting to cope with imbalance data classification with subclass information available in
-the minority class.
+This code implements the proposed UDNC method, an unsupervised learning aided DNC. It utilizes clustering algorithms
+to create minority subclasses label, and use OvO to train on these labels.
 """
 import numpy as np
 import pandas as pd
 from imblearn.metrics import specificity_score
-from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
+from sklearn.decomposition import PCA
 from sklearn.metrics import classification_report, confusion_matrix, cohen_kappa_score, accuracy_score, \
     balanced_accuracy_score, precision_score, recall_score, f1_score
 from sklearn.base import clone
 import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
-from scipy.spatial.distance import pdist, squareform
-from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
-from sklearn.mixture import GaussianMixture
-from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import StandardScaler
-import xgboost as xgb
+from sklearn.multiclass import OneVsOneClassifier, OneVsRestClassifier
 
 
-def divide_n_conquer_plus(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.DataFrame,
-                     y_test: pd.DataFrame, clus_algo, verbose: bool = False) -> pd.DataFrame:
+def udnc(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.DataFrame,
+                     y_test: pd.DataFrame, clus_algo: object, verbose: bool = False) -> pd.DataFrame:
     """
     Carry out the DNC plus method on the Machine Predictive Maintenance Classification dataset. The classification
     results will be stored to a .csv file and the console information will be store to a .txt file.
@@ -31,44 +24,28 @@ def divide_n_conquer_plus(model: object, X_train: pd.DataFrame, X_test: pd.DataF
     :param model: classifier.
     :param X_train: training data.
     :param X_test: testing data.
-    :param y_train: training label.
-    :param y_test: testing label.
-
+    :param y_train: training label (binary).
+    :param y_test: testing label (binary).
+    :param clus_algo: clustering algorithm.
     :param verbose: whether to print out the confusion matrix or not.
-
     :return: the dataframe with the classification metrics.
     """
-    # Only have binary information
-    y_train[y_train != 0] = 1
-    y_test[y_test != 0] = 1
-
-    record_metrics = ['model', 'method', 'acc', 'kappa', 'bacc', 'precision', 'recall', 'specificity', 'f1']
+    record_metrics = ['model', 'method', 'f1', 'precision', 'recall', 'bacc', 'kappa', 'acc', 'specificity']
     metrics = {key: [] for key in record_metrics}
 
     # get multi-class label
     y_train_multi = cluster(X_train, y_train, clus_algo)
 
-    y_train_preds = []
-    y_preds = []
-    for sub in range(1, int(y_train_multi.nunique())):
-        local_model = clone(model)
-        # select only majority and minority sub
-        X_train_local = X_train[(y_train_multi == sub) | (y_train_multi == 0)]
-        y_train_local = y_train_multi[(y_train_multi == sub) | (y_train_multi == 0)]
-        y_train_local[y_train_local != 0] = 1  # turn non-zero sub minority into 1
+    # training
+    multi_model = OneVsOneClassifier(model)
+    multi_model.fit(X_train, y_train_multi)
 
-        local_model.fit(X_train_local, y_train_local)
-        y_train_preds.append(local_model.predict(X_train))
-
-        y_pred_sub = local_model.predict(X_test)
-        y_preds.append(y_pred_sub)
-
-    # voting
-    y_preds = np.array(y_preds)
-    y_pred = np.where(np.sum(y_preds, axis=0) > 0, 1, 0)
+    # testing
+    y_pred_multi = multi_model.predict(X_test)
+    y_pred = np.where(y_pred_multi > 0, 1, 0)
 
     if verbose:
-        print(f'DNC Plus {model}')
+        print(f'UDNC {model}')
         print(confusion_matrix(y_test, y_pred, labels=[0, 1]))
         print(classification_report(y_test, y_pred))
 
@@ -82,52 +59,25 @@ def divide_n_conquer_plus(model: object, X_train: pd.DataFrame, X_test: pd.DataF
     metrics['f1'].append(round(f1_score(y_test, y_pred), 4))
 
     metrics['model'].append(model)
-    metrics['method'].append(f"dncPlus_{clus_algo}")
+    metrics['method'].append(f"UDNC_{str(clus_algo).split("(")[0]}")
 
     return pd.DataFrame(metrics)
 
 
-def cluster(X, y, clus_algo):
+def cluster(X, y, clus_algo: object):
+    """
+    This function applies the clustering algorithm on the minority class to generate minority subclasses.
+
+    :param X: Features.
+    :param y: Binary labels.
+    :param clus_algo: The clustering algorithm.
+    :return: The multiclass label after applying clustering.
+    """
     X_pos = X[y == 1]
-    X_neg = X[y == 0]
     y_multi = y.copy()
 
-    if clus_algo == "kmeans":
-        kmeans = KMeans(n_clusters=5, random_state=42)
-        y_pred = kmeans.fit_predict(X_pos) + 1
-    elif clus_algo == "divisive":
-        distance_matrix = squareform(pdist(X))
-        Z = linkage(X, method='ward')
-        y_pred = fcluster(Z, t=5, criterion='maxclust')
+    y_min__multi_label = clus_algo.fit_predict(X_pos) + 1
 
-        # plt.figure(figsize=(12, 6))
-        # dendrogram(Z, truncate_mode='level', p=5, color_threshold=0.7 * max(Z[:, 2]))
-        # plt.title('Dendrogram for Divisive Clustering (Ward Linkage)')
-        # plt.xlabel('Data Point Index')
-        # plt.ylabel('Distance')
-        # plt.grid(True)
-        # plt.show()
-    elif clus_algo == "agg":
-        agg_clustering = AgglomerativeClustering(n_clusters=5, linkage='ward')
-        y_pred = agg_clustering.fit_predict(X)
-    elif clus_algo == "dbscan":
-        # pca = PCA(n_components=2)
-        # X_pca = pca.fit_transform(X)
-
-        dbscan = DBSCAN(eps=0.5, min_samples=5)
-        y_pred = dbscan.fit_predict(X_pos)
-    elif clus_algo == "gmm":
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X_pos)
-
-        # Apply GMM to cluster the data
-        n_components = 5  # Number of clusters (components)
-        gmm = GaussianMixture(n_components=n_components, covariance_type='full', random_state=42)
-        gmm.fit(X_scaled)
-
-        # Predict cluster labels
-        y_pred = gmm.predict(X_scaled) + 1
-    #
     # pca = PCA(n_components=2)
     # X_pca = pca.fit_transform(X)
     #
@@ -141,5 +91,5 @@ def cluster(X, y, clus_algo):
     # plt.grid(True)
     # plt.show()
 
-    y_multi[y == 1] = y_pred
+    y_multi[y == 1] = y_min__multi_label
     return y_multi

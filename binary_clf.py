@@ -7,8 +7,7 @@ import pandas as pd
 from sklearn.metrics import (classification_report, confusion_matrix, accuracy_score, balanced_accuracy_score,
                              cohen_kappa_score, precision_score, recall_score, f1_score)
 from imblearn.metrics import specificity_score
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.base import clone
 
 
 def binary(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.DataFrame, y_test: pd.DataFrame,
@@ -19,24 +18,21 @@ def binary(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: 
     :param model: classifier.
     :param X_train: training data.
     :param X_test: testing data.
-    :param y_train: training label. Note that these are the multi-class labels
-    :param y_test: testing label. Note that these are the multi-class labels
+    :param y_train: training binary label.
+    :param y_test: testing binary label.
 
     :param verbose: whether to print out the confusion matrix or not.
 
     :return: the dataframe with the classification metrics.
     """
     # metrics
-    record_metrics = ['model', 'method', 'f1', 'precision', 'recall', 'kappa', 'bacc', 'acc', 'specificity']
+    record_metrics = ['model', 'method', 'f1', 'precision', 'recall', 'bacc', 'kappa', 'acc', 'specificity']
     metrics = {key: [] for key in record_metrics}
-
-    # convert multi-class to binary class
-    y_train[y_train != 0] = 1
-    y_test[y_test != 0] = 1
 
     # train & test
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
+
     if verbose:
         print(f'Binary {model}')
         print(confusion_matrix(y_test, y_pred, labels=[0, 1]))
