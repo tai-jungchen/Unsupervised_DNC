@@ -2,7 +2,7 @@
 Author: Alex (Tai-Jung) Chen
 
 This code implements the proposed UDNC method, an unsupervised learning aided DNC. It utilizes clustering algorithms
-to create minority subclasses label, and use OvO to train on these labels.
+to create subclass label, and use OvO to train on these labels.
 """
 import numpy as np
 import pandas as pd
@@ -34,7 +34,7 @@ def udnc(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd
     metrics = {key: [] for key in record_metrics}
 
     # get multi-class label
-    y_train_multi = cluster(X_train, y_train, clus_algo)
+    y_train_multi, maj_idx = cluster(X_train, y_train, clus_algo)
 
     # training
     multi_model = OneVsOneClassifier(model)
@@ -42,7 +42,7 @@ def udnc(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd
 
     # testing
     y_pred_multi = multi_model.predict(X_test)
-    y_pred = np.where(y_pred_multi > 0, 1, 0)
+    y_pred = np.where(y_pred_multi > maj_idx, 1, 0)
 
     if verbose:
         print(f'UDNC {model}')
@@ -73,23 +73,13 @@ def cluster(X, y, clus_algo: object):
     :param clus_algo: The clustering algorithm.
     :return: The multiclass label after applying clustering.
     """
+    X_neg = X[y == 0]
     X_pos = X[y == 1]
     y_multi = y.copy()
 
-    y_min__multi_label = clus_algo.fit_predict(X_pos) + 1
+    y_maj__multi_label = clus_algo.fit_predict(X_neg)
+    y_min__multi_label = clus_algo.fit_predict(X_pos) + max(y_maj__multi_label) + 1
 
-    # pca = PCA(n_components=2)
-    # X_pca = pca.fit_transform(X)
-    #
-    # # Plot the clusters assigned by k-means
-    # plt.figure(figsize=(10, 6))
-    # scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=y_pred, cmap='viridis', alpha=0.6)
-    # plt.colorbar(scatter, label='Cluster Label')
-    # plt.title('K-means Clustering on Synthetic Data (6 Classes)')
-    # plt.xlabel('PCA Component 1')
-    # plt.ylabel('PCA Component 2')
-    # plt.grid(True)
-    # plt.show()
-
+    y_multi[y == 0] = y_maj__multi_label
     y_multi[y == 1] = y_min__multi_label
-    return y_multi
+    return y_multi, max(y_maj__multi_label)

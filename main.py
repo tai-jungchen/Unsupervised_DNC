@@ -47,6 +47,7 @@ def main(dataset: str, models: List[str], n_rep: int, cluster: object) -> pd.Dat
     for i in tqdm(range(n_rep)):
         if dataset == 'MPMC':
             df = pd.read_csv("datasets/preprocessed/mpmc.csv")
+            df = df[df['failure.type'] != 5]
             X_train, X_test, y_train, y_test = train_test_split(df.iloc[:, :-2], df['target'], test_size=0.3,
                                                                 stratify=df['failure.type'], random_state=i)
         elif dataset == 'GLASS':
@@ -83,11 +84,18 @@ if __name__ == "__main__":
     N_REP = 10
 
     ##### MPMC #####
-    # DATASET = "MPMC"
-    # MODELS = [LogisticRegression(), GaussianNB(), LDA(), SVC(kernel='linear', C=0.1),
-    #           SVC(kernel='rbf', C=0.5), DecisionTreeClassifier(), RandomForestClassifier(),
-    #           GradientBoostingClassifier(random_state=42), xgb.XGBClassifier()]
-    # CLUS = KMeans(n_clusters=4)
+    DATASET = "MPMC"
+    MODELS = [LogisticRegression(),
+              GaussianNB(),
+              LDA(),
+              SVC(kernel='linear', C=0.1),
+              SVC(kernel='rbf', C=0.5),
+              DecisionTreeClassifier(random_state=42),
+              RandomForestClassifier(random_state=42),
+              GradientBoostingClassifier(random_state=42),
+              xgb.XGBClassifier(random_state=42)]
+
+    CLUS = KMeans(n_clusters=3)
     # CLUS = GaussianMixture(n_components=5, covariance_type='full')
     # CLUS = AgglomerativeClustering(n_clusters=2, linkage='ward')
     ##### MPMC #####
@@ -109,15 +117,15 @@ if __name__ == "__main__":
     ##### MNIST #####
 
     ##### GLASS #####
-    DATASET = "GLASS"
-    MODELS = [LogisticRegression(), GaussianNB(),  SVC(kernel='linear', C=1),
-              SVC(kernel='rbf', C=1), DecisionTreeClassifier(), RandomForestClassifier(),
-              GradientBoostingClassifier(), xgb.XGBClassifier()]
-    # CLUS = KMeans(n_clusters=4)
-    CLUS = GaussianMixture(n_components=3, covariance_type='full')
+    # DATASET = "GLASS"
+    # MODELS = [LogisticRegression(), GaussianNB(),  SVC(kernel='linear', C=1),
+    #           SVC(kernel='rbf', C=1), DecisionTreeClassifier(), RandomForestClassifier(),
+    #           GradientBoostingClassifier(), xgb.XGBClassifier()]
+    # # CLUS = KMeans(n_clusters=4)
+    # CLUS = GaussianMixture(n_components=3, covariance_type='full')
     ##### GLASS #####
 
     res = main(DATASET, MODELS, N_REP, CLUS)
-    filename = f"results_0303_{DATASET}.csv"
+    filename = f"results_0308_{DATASET}.csv"
     res.to_csv(filename)
 
