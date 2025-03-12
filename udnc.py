@@ -62,7 +62,6 @@ def udnc(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd
 
     metrics['model'].append(model)
     metrics['method'].append(f"UDNC_{str(maj_clus_algo).split("(")[0]}")
-
     return pd.DataFrame(metrics)
 
 

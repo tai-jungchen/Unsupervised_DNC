@@ -100,8 +100,10 @@ if __name__ == "__main__":
               GradientBoostingClassifier(random_state=42),
               xgb.XGBClassifier(random_state=42)]
 
-    MIN_CLUS = KMeans(n_clusters=4)
-    MAJ_CLUS = KMeans(n_clusters=4)
+    # MIN_CLUS = KMeans(n_clusters=4)
+    # MAJ_CLUS = KMeans(n_clusters=4)
+    MIN_CLUS = GaussianMixture(n_components=5, covariance_type='full')
+    MAJ_CLUS = GaussianMixture(n_components=4, covariance_type='full')
     # CLUS = GaussianMixture(n_components=5, covariance_type='full')
     # CLUS = AgglomerativeClustering(n_clusters=2, linkage='ward')
     ##### MPMC #####
@@ -132,6 +134,6 @@ if __name__ == "__main__":
     ##### GLASS #####
 
     res = main(DATASET, MODELS, N_REP, MAJ_CLUS, MIN_CLUS)
-    filename = f"results_0311_{DATASET}.csv"
+    filename = f"results_0312_{DATASET}.csv"
     res.to_csv(filename)
 
