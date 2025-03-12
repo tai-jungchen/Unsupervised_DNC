@@ -28,16 +28,18 @@ from sklearn.mixture import GaussianMixture
 
 from binary_clf import binary
 from udnc import udnc
+from lda_aided_divide_n_conquer import LDAAidedDNC
 
 
-def main(dataset: str, models: List[str], n_rep: int, cluster: object) -> pd.DataFrame:
+def main(dataset: str, models: List[str], n_rep: int, maj_cluster: object, min_cluster: object) -> pd.DataFrame:
     """
     Run through all the methods for comparison.
 
     :param dataset: dataset for testing.
     :param models: types of models used for classification.
     :param n_rep: number of replications.
-    :param cluster: clustering algorithm
+    :param maj_cluster: clustering algorithm for majority class
+    :param min_cluster: clustering algorithm for minority class
     :return results stored in the DataFrame.
     """
     res_df = pd.DataFrame()
@@ -70,11 +72,14 @@ def main(dataset: str, models: List[str], n_rep: int, cluster: object) -> pd.Dat
 
         # run models
         for model in models:
-            res_bin = binary(model, X_train_scaled.copy(), X_test_scaled.copy(), y_train.copy(), y_test.copy(),
-                             verbose=True)
+            lda_dnc = LDAAidedDNC(model, [], "f1", maj_cluster, min_cluster)
+
+            res_bin = binary(model, X_train_scaled.copy(), X_test_scaled.copy(), y_train.copy(), y_test.copy())
             res_udnc = udnc(model, X_train_scaled.copy(), X_test_scaled.copy(), y_train.copy(), y_test.copy(),
-                            cluster, verbose=True)
-            res_df = pd.concat([res_df, res_bin, res_udnc], axis=0)
+                            maj_cluster, min_cluster)
+            res_ovo_lda = lda_dnc.fit(X_train_scaled.copy(), X_test_scaled.copy(), y_train.copy(),
+                                               y_test.copy())
+            res_df = pd.concat([res_df, res_bin, res_udnc, res_ovo_lda], axis=0)
 
     # average the performance
     return res_df.groupby(by=["method", "model"], sort=False).mean()
@@ -95,7 +100,8 @@ if __name__ == "__main__":
               GradientBoostingClassifier(random_state=42),
               xgb.XGBClassifier(random_state=42)]
 
-    CLUS = KMeans(n_clusters=3)
+    MIN_CLUS = KMeans(n_clusters=4)
+    MAJ_CLUS = KMeans(n_clusters=4)
     # CLUS = GaussianMixture(n_components=5, covariance_type='full')
     # CLUS = AgglomerativeClustering(n_clusters=2, linkage='ward')
     ##### MPMC #####
@@ -125,7 +131,7 @@ if __name__ == "__main__":
     # CLUS = GaussianMixture(n_components=3, covariance_type='full')
     ##### GLASS #####
 
-    res = main(DATASET, MODELS, N_REP, CLUS)
-    filename = f"results_0308_{DATASET}.csv"
+    res = main(DATASET, MODELS, N_REP, MAJ_CLUS, MIN_CLUS)
+    filename = f"results_0311_{DATASET}.csv"
     res.to_csv(filename)
 
