@@ -27,19 +27,18 @@ from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from sklearn.mixture import GaussianMixture
 
 from binary_clf import binary
-from udnc import udnc
+from udnc import uovo
 from lda_aided_divide_n_conquer import LDAAidedDNC
 
 
-def main(dataset: str, models: List[str], n_rep: int, maj_cluster: object, min_cluster: object) -> pd.DataFrame:
+def main(dataset: str, models: List[str], n_rep: int, clusters: List) -> pd.DataFrame:
     """
     Run through all the methods for comparison.
 
     :param dataset: dataset for testing.
     :param models: types of models used for classification.
     :param n_rep: number of replications.
-    :param maj_cluster: clustering algorithm for majority class
-    :param min_cluster: clustering algorithm for minority class
+    :param clusters: clustering algorithms to be used.
     :return results stored in the DataFrame.
     """
     res_df = pd.DataFrame()
@@ -50,6 +49,17 @@ def main(dataset: str, models: List[str], n_rep: int, maj_cluster: object, min_c
         if dataset == 'MPMC':
             df = pd.read_csv("datasets/preprocessed/mpmc.csv")
             df = df[df['failure.type'] != 5]
+            X_train, X_test, y_train, y_test = train_test_split(df.iloc[:, :-2], df['target'], test_size=0.3,
+                                                                stratify=df['failure.type'], random_state=i)
+        elif dataset == 'FAULTS':
+            df = pd.read_csv("datasets/preprocessed/faults.csv")
+            df = df[(df['failure.type'] == 0) | (df['failure.type'] == 4) | (df['failure.type'] == 5) | (
+                        df['failure.type'] == 6)]
+
+            # make the labels continuous
+            label_mapping = {0: 0, 4: 1, 5: 2, 6: 3}
+            df['failure.type'] = df['failure.type'].map(label_mapping)
+
             X_train, X_test, y_train, y_test = train_test_split(df.iloc[:, :-2], df['target'], test_size=0.3,
                                                                 stratify=df['failure.type'], random_state=i)
         elif dataset == 'GLASS':
@@ -72,25 +82,28 @@ def main(dataset: str, models: List[str], n_rep: int, maj_cluster: object, min_c
 
         # run models
         for model in models:
-            lda_dnc = LDAAidedDNC(model, [], "f1", maj_cluster, min_cluster)
+            for clus in clusters:
+                # res_uovo = uovo(model, X_train_scaled.copy(), X_test_scaled.copy(), y_train.copy(), y_test.copy(), clus)
+
+                samp = {i: 220 for i in range(1, clus.n_components)}
+                lda_ovo = LDAAidedDNC(model,
+                                      [BorderlineSMOTE(sampling_strategy=samp, k_neighbors=1, m_neighbors=5, random_state=521)],
+                                      "f1",
+                                      clus)
+                res_ovo_lda = lda_ovo.fit(X_train_scaled.copy(), X_test_scaled.copy(), y_train.copy(), y_test.copy())
+                res_df = pd.concat([res_df, res_ovo_lda], axis=0)
 
             res_bin = binary(model, X_train_scaled.copy(), X_test_scaled.copy(), y_train.copy(), y_test.copy())
-            res_udnc = udnc(model, X_train_scaled.copy(), X_test_scaled.copy(), y_train.copy(), y_test.copy(),
-                            maj_cluster, min_cluster)
-            res_ovo_lda = lda_dnc.fit(X_train_scaled.copy(), X_test_scaled.copy(), y_train.copy(),
-                                               y_test.copy())
-            res_df = pd.concat([res_df, res_bin, res_udnc, res_ovo_lda], axis=0)
+            res_df = pd.concat([res_df, res_bin], axis=0)
 
     # average the performance
     return res_df.groupby(by=["method", "model"], sort=False).mean()
 
 
 if __name__ == "__main__":
-    N_REP = 10
-
     ##### MPMC #####
     DATASET = "MPMC"
-    MODELS = [LogisticRegression(),
+    MODELS = [LogisticRegression(penalty='l1', solver='saga', max_iter=5000),
               GaussianNB(),
               LDA(),
               SVC(kernel='linear', C=0.1),
@@ -100,13 +113,43 @@ if __name__ == "__main__":
               GradientBoostingClassifier(random_state=42),
               xgb.XGBClassifier(random_state=42)]
 
-    # MIN_CLUS = KMeans(n_clusters=4)
-    # MAJ_CLUS = KMeans(n_clusters=4)
-    MIN_CLUS = GaussianMixture(n_components=5, covariance_type='full')
-    MAJ_CLUS = GaussianMixture(n_components=4, covariance_type='full')
-    # CLUS = GaussianMixture(n_components=5, covariance_type='full')
+    CLUSS = [GaussianMixture(n_components=6, covariance_type='full'),
+             GaussianMixture(n_components=5, covariance_type='full'),
+             GaussianMixture(n_components=4, covariance_type='full'),
+             GaussianMixture(n_components=3, covariance_type='full'),
+             GaussianMixture(n_components=2, covariance_type='full')]
+    # CLUSS = [KMeans(n_clusters=6),
+    #          KMeans(n_clusters=5),
+    #          KMeans(n_clusters=4),
+    #          KMeans(n_clusters=3),
+    #          KMeans(n_clusters=2)]
     # CLUS = AgglomerativeClustering(n_clusters=2, linkage='ward')
+    # CLUS = KMeans(n_clusters=4)
     ##### MPMC #####
+
+    ##### FAULTS #####
+    # DATASET = "FAULTS"
+    # MODELS = [LogisticRegression(penalty='l1', solver='saga', max_iter=5000),
+    #           GaussianNB(),
+    #           LDA(),
+    #           SVC(kernel='linear', C=0.1),
+    #           SVC(kernel='rbf', C=0.5),
+    #           DecisionTreeClassifier(random_state=42),
+    #           RandomForestClassifier(random_state=42),
+    #           GradientBoostingClassifier(random_state=42),
+    #           xgb.XGBClassifier(random_state=42)]
+
+    # CLUSS = [GaussianMixture(n_components=6, covariance_type='full'),
+    #          GaussianMixture(n_components=5, covariance_type='full'),
+    #          GaussianMixture(n_components=4, covariance_type='full'),
+    #          GaussianMixture(n_components=3, covariance_type='full'),
+    #          GaussianMixture(n_components=2, covariance_type='full')]
+    # CLUSS = [KMeans(n_clusters=6),
+    #          KMeans(n_clusters=5),
+    #          KMeans(n_clusters=4),
+    #          KMeans(n_clusters=3),
+    #          KMeans(n_clusters=2)]
+    ##### FAULTS #####
 
     ##### USPS #####
     # DATASET = "USPS"
@@ -133,7 +176,8 @@ if __name__ == "__main__":
     # CLUS = GaussianMixture(n_components=3, covariance_type='full')
     ##### GLASS #####
 
-    res = main(DATASET, MODELS, N_REP, MAJ_CLUS, MIN_CLUS)
-    filename = f"results_0312_{DATASET}.csv"
+    N_REP = 10
+    res = main(DATASET, MODELS, N_REP, CLUSS)
+    filename = f"results_0317_{DATASET}.csv"
     res.to_csv(filename)
 

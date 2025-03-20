@@ -15,9 +15,8 @@ import matplotlib.pyplot as plt
 from sklearn.multiclass import OneVsOneClassifier, OneVsRestClassifier
 
 
-def udnc(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.DataFrame,
-                     y_test: pd.DataFrame, maj_clus_algo: object, min_clus_algo: object, verbose: bool = False) -> (
-        pd.DataFrame):
+def uovo(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.DataFrame,
+                     y_test: pd.DataFrame, clus_algo: object, verbose: bool = False) -> pd.DataFrame:
     """
     Carry out the DNC plus method on the Machine Predictive Maintenance Classification dataset. The classification
     results will be stored to a .csv file and the console information will be store to a .txt file.
@@ -27,8 +26,7 @@ def udnc(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd
     :param X_test: testing data.
     :param y_train: training label (binary).
     :param y_test: testing label (binary).
-    :param maj_clus_algo: clustering algorithm for majority class
-    :param min_clus_algo: clustering algorithm for minority class
+    :param clus_algo: clustering algorithm
     :param verbose: whether to print out the confusion matrix or not.
     :return: the dataframe with the classification metrics.
     """
@@ -36,7 +34,7 @@ def udnc(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd
     metrics = {key: [] for key in record_metrics}
 
     # get multi-class label
-    y_train_multi, maj_idx = cluster(X_train, y_train, maj_clus_algo, min_clus_algo)
+    y_train_multi, maj_idx = cluster(X_train, y_train, clus_algo)
 
     # training
     multi_model = OneVsOneClassifier(model)
@@ -47,7 +45,7 @@ def udnc(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd
     y_pred = np.where(y_pred_multi >= maj_idx, 1, 0)
 
     if verbose:
-        print(f'UDNC {model}')
+        print(f'UOvO {model}')
         print(confusion_matrix(y_test, y_pred, labels=[0, 1]))
         print(classification_report(y_test, y_pred))
 
@@ -61,27 +59,25 @@ def udnc(model: object, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd
     metrics['f1'].append(round(f1_score(y_test, y_pred), 4))
 
     metrics['model'].append(model)
-    metrics['method'].append(f"UDNC_{str(maj_clus_algo).split("(")[0]}")
+    metrics['method'].append(f"UOvO_{str(clus_algo)}")
     return pd.DataFrame(metrics)
 
 
-def cluster(X, y, maj_clus, min_clus):
+def cluster(X, y, clus):
     """
     This function applies the clustering algorithm on the minority class to generate minority subclasses.
 
     :param X: Features.
     :param y: Binary labels.
-    :param maj_clus: The clustering algorithm for majority class.
-    :param min_clus: The clustering algorithm for minority class.
+    :param clus: The clustering algorithm.
     :return: The multiclass label after applying clustering.
     """
-    X_maj = X[y == 0]
+    # X_maj = X[y == 0]
     X_mino = X[y == 1]
     y_multi = y.copy()
 
-    y_maj_multi_label = maj_clus.fit_predict(X_maj)
-    y_min_multi_label = min_clus.fit_predict(X_mino) + max(y_maj_multi_label) + 1
+    y_min_multi_label = clus.fit_predict(X_mino) + 1
 
-    y_multi[y == 0] = y_maj_multi_label
+    # y_multi[y == 0] = y_maj_multi_label
     y_multi[y == 1] = y_min_multi_label
-    return y_multi, max(y_maj_multi_label) + 1
+    return y_multi, 1

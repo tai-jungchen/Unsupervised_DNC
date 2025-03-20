@@ -14,12 +14,11 @@ from sklearn.multiclass import OneVsOneClassifier
 
 
 class LDAAidedDNC:
-    def __init__(self, model: object, smotes: list, metric: str, maj_clus_algo, mino_clus_algo):
+    def __init__(self, model: object, smotes: list, metric: str, clus_algo):
         self.model = model
         self.smotes = smotes
         self.metric = metric
-        self.maj_clus_algo = maj_clus_algo
-        self.mino_clus_algo = mino_clus_algo
+        self.clus_algo = clus_algo
 
     def fit(self, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.DataFrame, y_test: pd.DataFrame) -> pd.DataFrame:
         """
@@ -43,7 +42,7 @@ class LDAAidedDNC:
             res_df = pd.concat([res_df, res], axis=0)
         else:
             for smote in self.smotes:
-                res = self._algo(X_train.copy(), X_test.copy(), y_train.copy(), y_test.copy(), maj_idx,smote=smote)
+                res = self._algo(X_train.copy(), X_test.copy(), y_train_multi.copy(), y_test.copy(), maj_idx, smote=smote)
                 res_df = pd.concat([res_df, res], axis=0)
 
         # return the optimal result in terms of the metric
@@ -112,10 +111,10 @@ class LDAAidedDNC:
 
         if smote:
             smote_name = str(smote).split("(")[0]
-            metrics['method'].append(f"{discriminate_analysis}_{smote_name}")
+            metrics['method'].append(f"UOvO_{str(self.clus_algo)}_{discriminate_analysis}_{smote_name}")
             metrics['smote'].append(smote)
         else:
-            metrics['method'].append(f"{discriminate_analysis}")
+            metrics['method'].append(f"UOvO_{str(self.clus_algo)}_{discriminate_analysis}")
             metrics['smote'].append(None)
         return pd.DataFrame(metrics)
 
@@ -127,13 +126,13 @@ class LDAAidedDNC:
         :param y: Binary labels.
         :return: The multiclass label after applying clustering.
         """
-        X_maj = X[y == 0]
+        # X_maj = X[y == 0]
         X_mino = X[y == 1]
         y_multi = y.copy()
 
-        y_maj_multi_label = self.maj_clus_algo.fit_predict(X_maj)
-        y_min_multi_label = self.mino_clus_algo.fit_predict(X_mino) + max(y_maj_multi_label) + 1
+        # y_maj_multi_label = self.maj_clus_algo.fit_predict(X_maj)
+        y_min_multi_label = self.clus_algo.fit_predict(X_mino) + 1
 
-        y_multi[y == 0] = y_maj_multi_label
+        # y_multi[y == 0] = y_maj_multi_label
         y_multi[y == 1] = y_min_multi_label
-        return y_multi, max(y_maj_multi_label) + 1
+        return y_multi, 1
